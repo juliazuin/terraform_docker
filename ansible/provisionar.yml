@@ -1,0 +1,117 @@
+- hosts: all  
+  become: yes
+  handlers:
+    - name: "restart apache"
+      service:
+        name: apache2
+        state: restarted
+      become: yes
+  tasks:
+    #### com estado
+    # - name: "Criando um arquivo a toa no servidor"
+    #   copy: 
+    #     content: "teste danilo" 
+    #     dest: "/home/ubuntu/mais_um.txt"
+    #     backup: yes
+    #     owner: ubuntu
+    #     group: ubuntu
+    #     mode: 777
+
+    #### sem estado
+    # - name: "Criando um arquivo a toa no servidor"
+    #   shell: "echo 'escrevendo algo no servidor' >> teste.txt"
+  
+    - name: "Roda: sudo apt update"
+      apt:
+        upgrade: yes
+        update_cache: yes
+        cache_valid_time: 86400 #Um dia
+    
+    - name: "Instala pacotes em lote"
+      apt:
+        name: "{{ item }}"
+        state: latest
+      with_items:
+        - php7.4
+        - apache2
+        - libapache2-mod-php7.4
+        - php-mysql
+        - php-curl
+        - mysql-server
+        - python3-pycurl
+        - python3-mysqldb
+        - unzip
+
+    - name: "Fazendo downlaod do wordpress"
+      get_url:
+        url: "https://br.wordpress.org/latest-pt_BR.tar.gz"
+        dest: "/tmp/wordpress.tar.gz"
+    
+    - name: "Fazendo descompactação dos arquivos do WP"
+      unarchive:
+        src: "/tmp/wordpress.tar.gz"
+        dest: "/var/www"
+        remote_src: yes
+      
+
+    - name: "Copia arquivo WP"
+      copy:
+        src: '/var/www/wordpress/wp-config-sample.php'
+        dest: '/var/www/wordpress/wp-config.php'
+        remote_src: yes
+
+    - name: "Configura o wp-config com as senhas"
+      replace:
+        path: '/var/www/wordpress/wp-config.php'
+        regexp: "{{ item.regex }}"
+        replace: "{{ item.value }}"
+      with_items:
+        - { regex: 'nome_do_banco_de_dados_aqui', value: 'banco_wordpress' }
+        - { regex: 'nome_de_usuario_aqui', value: 'root' }
+        - { regex: 'senha_aqui', value: 'root' }
+
+    - name: "Add tema no wp"
+      get_url:
+        url: "https://downloads.wordpress.org/theme/blocksy.1.8.6.2.zip"
+        dest: "/tmp/blocksy.1.8.6.2.zip"
+
+    - name: "unzip tema"
+      unarchive:
+        src: "/tmp/blocksy.1.8.6.2.zip"
+        dest: "/var/www/wordpress/wp-content/themes"
+        remote_src: yes
+
+
+    - name: "Trocando pasta do render do apache para o wordpress"
+      copy:
+        src: "apache/000-default.conf"
+        dest: "/etc/apache2/sites-available/000-default.conf"
+      notify:
+        - "restart apache"
+
+    - shell: cat /var/www/wordpress/wp-config.php
+      register: ps
+    - debug:
+        msg: " '{{ ps.stdout_lines }}' "
+
+    - name: "Lavanta serviço do mysql"
+      become: yes
+      service:
+        name: mysql
+        state: started
+
+# comendado pois o bd ja esta criado e os usuarios tb
+    #- name: "Criando senha root mysql"
+    #  become: yes
+    #  mysql_user:
+    #    name: root
+    #    host: localhost
+    #    password: root
+    #    priv: "*.*:ALL,GRANT"
+
+    #- name: "Cria o banco de dados MySQL"
+    #  mysql_db:
+    #    name: banco_wordpress
+    #    login_user: root
+    #    login_password: root
+    #    state: present
